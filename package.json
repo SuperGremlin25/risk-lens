@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "echo \"No tests specified\" && exit 0",
+    "setup": "node scripts/setup-deployment.js"
   },
   "keywords": ["contract", "analysis", "pdf", "legal", "cloudflare-worker"],
   "author": "",

@@ -1,0 +1,30 @@
+# Example Wrangler configuration for RiskLens
+# Copy this to wrangler.toml and update with your actual values
+
+name = "risk-lens"
+main = "src/worker.js"
+compatibility_date = "2024-01-15"
+
+[[kv_namespaces]]
+binding = "RISK_LENS_KV"
+preview_id = "your_preview_namespace_id_here"    # Replace with actual preview namespace ID
+id = "your_production_namespace_id_here"         # Replace with actual production namespace ID
+
+[vars]
+HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models"
+
+# Example with custom worker name:
+# name = "my-contract-analyzer"  # This affects your Worker URL
+
+# Example with multiple environments:
+# [env.staging]
+# name = "risk-lens-staging"
+# [[env.staging.kv_namespaces]]
+# binding = "RISK_LENS_KV"
+# id = "staging_namespace_id_here"
+
+# [env.production]
+# name = "risk-lens-production"
+# [[env.production.kv_namespaces]]
+# binding = "RISK_LENS_KV"
+# id = "production_namespace_id_here"
