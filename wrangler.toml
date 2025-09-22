@@ -1,0 +1,11 @@
+name = "risk-lens"
+main = "src/worker.js"
+compatibility_date = "2024-01-15"
+
+[[kv_namespaces]]
+binding = "RISK_LENS_KV"
+preview_id = "preview_namespace_id"
+id = "production_namespace_id"
+
+[vars]
+HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models"

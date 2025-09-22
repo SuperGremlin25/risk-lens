@@ -1,0 +1,18 @@
+{
+  "name": "risk-lens",
+  "version": "1.0.0",
+  "description": "drop a PDF contract → instant plain-English summary, red flags, and structured clause extraction (payment terms, dates, termination, indemnity, liability, IP, auto-renewal, governing law, insurance, etc.).",
+  "main": "src/worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": ["contract", "analysis", "pdf", "legal", "cloudflare-worker"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20250922.0",
+    "wrangler": "^4.38.0"
+  }
+}
