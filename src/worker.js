@@ -474,9 +474,13 @@ const HTML_CONTENT = `
         <div class="upload-section">
             <div class="upload-area" id="uploadArea">
                 <div class="upload-icon">📄</div>
-                <div class="upload-text">Drop your PDF contract here or click to browse</div>
+                <div class="upload-text">Drop your PDF contract here, click to browse, or paste text below</div>
                 <div class="upload-hint">Supports PDF files up to 10MB</div>
                 <input type="file" id="fileInput" accept=".pdf">
+            </div>
+            <div style="margin-top: 20px;">
+                <textarea id="textInput" placeholder="Or paste your contract text here for instant analysis..." 
+                    style="width: 100%; height: 150px; padding: 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-family: inherit; resize: vertical;"></textarea>
             </div>
             <div style="text-align: center; margin-top: 20px;">
                 <button class="btn" id="analyzeBtn" disabled>Analyze Contract</button>
@@ -502,19 +506,60 @@ const HTML_CONTENT = `
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        // Load PDF.js dynamically to handle CORS issues
+        function loadPDFJS() {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
+                script.onload = () => {
+                    if (window.pdfjsLib) {
+                        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+                        resolve(window.pdfjsLib);
+                    } else {
+                        reject(new Error('PDF.js failed to load'));
+                    }
+                };
+                script.onerror = () => reject(new Error('Failed to load PDF.js'));
+                document.head.appendChild(script);
+            });
+        }
+        
+        let pdfjsLib = null;
         
         let selectedFile = null;
         let extractedText = '';
+        let pdfLibLoaded = false;
         
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
+        const textInput = document.getElementById('textInput');
         const analyzeBtn = document.getElementById('analyzeBtn');
         const analysisSection = document.getElementById('analysisSection');
         const loadingDiv = document.getElementById('loadingDiv');
         const resultsDiv = document.getElementById('resultsDiv');
+        
+        // Initialize PDF.js when page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                pdfjsLib = await loadPDFJS();
+                pdfLibLoaded = true;
+                console.log('PDF.js loaded successfully');
+            } catch (error) {
+                console.error('Failed to load PDF.js:', error);
+                // Continue without PDF.js - user can still paste text
+                updateAnalyzeButton();
+            }
+        });
+        
+        // Enable analyze button if there's text input
+        textInput.addEventListener('input', updateAnalyzeButton);
+        
+        function updateAnalyzeButton() {
+            const hasText = textInput.value.trim().length > 0;
+            const hasFile = selectedFile !== null;
+            analyzeBtn.disabled = !(hasText || hasFile);
+        }
         
         // Upload area interactions
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -560,6 +605,7 @@ const HTML_CONTENT = `
                     <div class="upload-hint">File size: \${(selectedFile.size / 1024 / 1024).toFixed(2)} MB</div>
                 \`;
                 analyzeBtn.disabled = false;
+                updateAnalyzeButton();
             }
         }
         
@@ -584,7 +630,18 @@ const HTML_CONTENT = `
         }
         
         async function analyzeContract() {
-            if (!selectedFile) return;
+            const textFromInput = textInput.value.trim();
+            const hasFile = selectedFile !== null;
+            
+            if (!textFromInput && !hasFile) {
+                showError('Please provide a PDF file or paste contract text to analyze.');
+                return;
+            }
+            
+            if (hasFile && !pdfLibLoaded) {
+                showError('PDF processing library is still loading. Please wait a moment and try again, or paste the text directly.');
+                return;
+            }
             
             analysisSection.classList.add('visible');
             loadingDiv.style.display = 'block';
@@ -592,11 +649,19 @@ const HTML_CONTENT = `
             analyzeBtn.disabled = true;
             
             try {
-                // Extract text from PDF
-                extractedText = await extractTextFromPDF(selectedFile);
+                let textToAnalyze = textFromInput;
                 
-                if (!extractedText.trim()) {
-                    throw new Error('No text could be extracted from the PDF');
+                // If a file is selected and PDF.js is loaded, extract text from PDF
+                if (hasFile && pdfLibLoaded) {
+                    extractedText = await extractTextFromPDF(selectedFile);
+                    if (!extractedText.trim()) {
+                        throw new Error('No text could be extracted from the PDF');
+                    }
+                    textToAnalyze = extractedText;
+                }
+                
+                if (!textToAnalyze.trim()) {
+                    throw new Error('No text provided for analysis');
                 }
                 
                 // Send to API for analysis
@@ -605,7 +670,7 @@ const HTML_CONTENT = `
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ text: extractedText })
+                    body: JSON.stringify({ text: textToAnalyze })
                 });
                 
                 if (!response.ok) {
@@ -621,7 +686,7 @@ const HTML_CONTENT = `
                 showError(error.message);
             } finally {
                 loadingDiv.style.display = 'none';
-                analyzeBtn.disabled = false;
+                updateAnalyzeButton();
             }
         }
         
