@@ -9,6 +9,26 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+// Approved states for contract analysis
+const APPROVED_STATES = [
+  'oklahoma', 'texas', 'louisiana', 'tennessee', 
+  'kansas', 'missouri', 'mississippi', 'alabama', 'florida'
+];
+
+// State detection patterns
+const STATE_PATTERNS = {
+  'alabama': /\b(?:alabama|AL)\b/gi,
+  'florida': /\b(?:florida|FL)\b/gi,
+  'kansas': /\b(?:kansas|KS)\b/gi,
+  'louisiana': /\b(?:louisiana|LA)\b/gi,
+  'mississippi': /\b(?:mississippi|MS)\b/gi,
+  'missouri': /\b(?:missouri|MO)\b/gi,
+  'oklahoma': /\b(?:oklahoma|OK)\b/gi,
+  'tennessee': /\b(?:tennessee|TN)\b/gi,
+  'texas': /\b(?:texas|TX)\b/gi,
+  'colorado': /\b(?:colorado|CO)\b/gi
+};
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -82,26 +102,48 @@ async function analyzeContract(request, env) {
     });
   }
 
-  // Analyze the contract
-  const analysis = await performContractAnalysis(text, env);
+  try {
+    // Analyze the contract
+    const analysis = await performContractAnalysis(text, env);
 
-  // Update rate limit
-  await env.RISK_LENS_KV.put(rateLimitKey, 
-    String((parseInt(currentCount) || 0) + 1), 
-    { expirationTtl: 3600 }
-  );
+    // Update rate limit
+    await env.RISK_LENS_KV.put(rateLimitKey, 
+      String((parseInt(currentCount) || 0) + 1), 
+      { expirationTtl: 3600 }
+    );
 
-  // Cache result
-  await env.RISK_LENS_KV.put(cacheKey, JSON.stringify(analysis), {
-    expirationTtl: 86400 // 24 hours
-  });
+    // Cache result
+    await env.RISK_LENS_KV.put(cacheKey, JSON.stringify(analysis), {
+      expirationTtl: 86400 // 24 hours
+    });
 
-  return new Response(JSON.stringify(analysis), {
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-  });
+    return new Response(JSON.stringify(analysis), {
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    // Handle state validation errors with 403 status
+    if (error.message.includes('only supports contracts from') || 
+        error.message.includes('Colorado contracts are not supported')) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Re-throw other errors to be handled by the outer try-catch
+    throw error;
+  }
 }
 
 async function performContractAnalysis(text, env) {
+  // First, detect and validate contract states
+  const detectedStates = detectContractStates(text);
+  const stateValidation = validateContractStates(detectedStates);
+  
+  if (!stateValidation.isValid) {
+    throw new Error(stateValidation.reason);
+  }
+  
   // Extract structured clauses
   const clauses = extractStructuredClauses(text);
   
@@ -115,7 +157,72 @@ async function performContractAnalysis(text, env) {
     summary,
     redFlags,
     clauses,
+    jurisdiction: {
+      detectedStates,
+      approvedStates: stateValidation.approvedStates
+    },
     timestamp: new Date().toISOString()
+  };
+}
+
+function detectContractStates(text) {
+  const detectedStates = [];
+  
+  // Check for governing law clauses first (most reliable)
+  const governingLawRegex = /(?:governing law|governed by|applicable law|jurisdiction)[^.]{0,100}(?:state of\s+)?([^.]{0,50})/gi;
+  const governingMatches = text.matchAll(governingLawRegex);
+  
+  for (const match of governingMatches) {
+    const context = match[0].toLowerCase();
+    for (const [state, pattern] of Object.entries(STATE_PATTERNS)) {
+      if (pattern.test(context)) {
+        detectedStates.push(state);
+      }
+    }
+  }
+  
+  // If no governing law found, check for general state mentions
+  if (detectedStates.length === 0) {
+    for (const [state, pattern] of Object.entries(STATE_PATTERNS)) {
+      if (pattern.test(text)) {
+        detectedStates.push(state);
+      }
+    }
+  }
+  
+  // Remove duplicates and return
+  return [...new Set(detectedStates)];
+}
+
+function validateContractStates(detectedStates) {
+  // Check if Colorado is detected (explicitly rejected)
+  if (detectedStates.includes('colorado')) {
+    return {
+      isValid: false,
+      reason: 'Colorado contracts are not supported by this analyzer.'
+    };
+  }
+  
+  // Check if any approved states are detected
+  const approvedStatesFound = detectedStates.filter(state => APPROVED_STATES.includes(state));
+  
+  if (approvedStatesFound.length === 0) {
+    if (detectedStates.length > 0) {
+      return {
+        isValid: false,
+        reason: `This analyzer only supports contracts from: ${APPROVED_STATES.join(', ')}. Detected states: ${detectedStates.join(', ')}.`
+      };
+    } else {
+      return {
+        isValid: false,
+        reason: `This analyzer only supports contracts from: ${APPROVED_STATES.join(', ')}. No valid state jurisdiction could be determined from the contract.`
+      };
+    }
+  }
+  
+  return {
+    isValid: true,
+    approvedStates: approvedStatesFound
   };
 }
 
@@ -599,11 +706,7 @@ const HTML_CONTENT = `
         
         function updateUploadArea() {
             if (selectedFile) {
-                uploadArea.innerHTML = \`
-                    <div class="upload-icon">✅</div>
-                    <div class="upload-text">Selected: \${selectedFile.name}</div>
-                    <div class="upload-hint">File size: \${(selectedFile.size / 1024 / 1024).toFixed(2)} MB</div>
-                \`;
+                uploadArea.innerHTML = '<div class="upload-icon">✅</div><div class="upload-text">Selected: ' + selectedFile.name + '</div><div class="upload-hint">File size: ' + (selectedFile.size / 1024 / 1024).toFixed(2) + ' MB</div>';
                 analyzeBtn.disabled = false;
                 updateAnalyzeButton();
             }
@@ -691,44 +794,59 @@ const HTML_CONTENT = `
         }
         
         function displayResults(analysis) {
-            // Display summary
-            document.getElementById('summaryDiv').textContent = analysis.summary;
-            
-            // Display red flags
-            const redFlagsDiv = document.getElementById('redFlagsDiv');
-            if (analysis.redFlags.length > 0) {
-                redFlagsDiv.innerHTML = analysis.redFlags
-                    .map(flag => \`<div class="red-flag">⚠️ \${flag}</div>\`)
-                    .join('');
-            } else {
-                redFlagsDiv.innerHTML = '<div style="color: #5c5; font-weight: bold;">✅ No major red flags detected</div>';
-            }
-            
-            // Display clauses
-            const clausesDiv = document.getElementById('clausesDiv');
-            const clauseCategories = Object.entries(analysis.clauses)
-                .filter(([key, value]) => Array.isArray(value) && value.length > 0)
-                .map(([key, value]) => {
-                    const title = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                    const items = value.map(item => 
-                        \`<div class="clause-item">\${item.length > 200 ? item.substring(0, 200) + '...' : item}</div>\`
-                    ).join('');
+            try {
+                // Display summary
+                const summaryDiv = document.getElementById('summaryDiv');
+                if (summaryDiv) {
+                    summaryDiv.textContent = analysis.summary;
+                }
+                
+                // Display jurisdiction information if available
+                if (analysis.jurisdiction) {
+                    const jurisdictionInfo = 'Approved jurisdiction: ' + analysis.jurisdiction.approvedStates.join(', ');
+                    if (summaryDiv) {
+                        summaryDiv.innerHTML = '<div style="background: #e8f5e8; padding: 10px; border-radius: 6px; margin-bottom: 15px; color: #2d5a2d; font-weight: bold;">✅ ' + jurisdictionInfo + '</div><div>' + analysis.summary + '</div>';
+                    }
+                }
+                
+                // Display red flags
+                const redFlagsDiv = document.getElementById('redFlagsDiv');
+                if (redFlagsDiv) {
+                    if (analysis.redFlags.length > 0) {
+                        redFlagsDiv.innerHTML = analysis.redFlags
+                            .map(flag => '<div class="red-flag">⚠️ ' + flag + '</div>')
+                            .join('');
+                    } else {
+                        redFlagsDiv.innerHTML = '<div style="color: #5c5; font-weight: bold;">✅ No major red flags detected</div>';
+                    }
+                }
+                
+                // Display clauses
+                const clausesDiv = document.getElementById('clausesDiv');
+                if (clausesDiv) {
+                    const clauseCategories = Object.entries(analysis.clauses)
+                        .filter(([key, value]) => Array.isArray(value) && value.length > 0)
+                        .map(([key, value]) => {
+                            const title = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                            const items = value.map(item => 
+                                '<div class="clause-item">' + (item.length > 200 ? item.substring(0, 200) + '...' : item) + '</div>'
+                            ).join('');
+                            
+                            return '<div class="clause-category"><div class="clause-title">' + title + '</div>' + items + '</div>';
+                        }).join('');
                     
-                    return \`
-                        <div class="clause-category">
-                            <div class="clause-title">\${title}</div>
-                            \${items}
-                        </div>
-                    \`;
-                }).join('');
-            
-            clausesDiv.innerHTML = clauseCategories || '<div>No specific clauses extracted</div>';
-            
-            resultsDiv.style.display = 'block';
+                    clausesDiv.innerHTML = clauseCategories || '<div>No specific clauses extracted</div>';
+                }
+                
+                resultsDiv.style.display = 'block';
+            } catch (error) {
+                console.error('Error displaying results:', error);
+                showError('Error displaying analysis results');
+            }
         }
         
         function showError(message) {
-            resultsDiv.innerHTML = \`<div class="error">❌ \${message}</div>\`;
+            resultsDiv.innerHTML = '<div class="error">❌ ' + message + '</div>';
             resultsDiv.style.display = 'block';
         }
     </script>
