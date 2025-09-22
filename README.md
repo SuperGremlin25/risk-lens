@@ -2,8 +2,8 @@
 
 Drop a PDF contract → instant plain-English summary, red flags, and structured clause extraction (payment terms, dates, termination, indemnity, liability, IP, auto-renewal, governing law, insurance, etc.).
 
-![RiskLens UI](https://github.com/user-attachments/assets/972180eb-4337-45c3-ac7a-18fefedc4668)
-![Analysis Results](https://github.com/user-attachments/assets/95617dd4-ac61-4b0a-9553-319addf3d7ad)
+![RiskLens UI](https://github.com/user-attachments/assets/e62738cf-1324-43df-b0da-f6ef6e4e2a22)
+![Analysis Results](https://github.com/user-attachments/assets/9a340717-6cd9-4f69-b6e3-89dff10d94fa)
 
 ## Features
 
