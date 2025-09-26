@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "echo \"No tests specified\" && exit 0",
+    "lint": "echo \"No linting configured\" && exit 0",
+    "security-audit": "npm audit",
+    "type-check": "echo \"No TypeScript configured\" && exit 0"
   },
   "keywords": ["contract", "analysis", "pdf", "legal", "cloudflare-worker"],
   "author": "",
