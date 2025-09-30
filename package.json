@@ -5,17 +5,33 @@
   "main": "src/worker.js",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "test": "echo \"No tests specified\" && exit 0",
-    "lint": "echo \"No linting configured\" && exit 0",
+    "deploy": "npm run deploy:production",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "deploy:preview": "wrangler deploy",
+    "test": "node test/basic-tests.js",
+    "test:api": "node test/api-tests.js",
+    "lint": "node scripts/lint-check.js",
     "security-audit": "npm audit",
-    "type-check": "echo \"No TypeScript configured\" && exit 0"
+    "type-check": "echo \"No TypeScript configured\" && exit 0",
+    "setup:kv": "node scripts/setup-kv.js",
+    "validate:deployment": "node scripts/validate-deployment.js",
+    "pre-deploy": "npm run lint && npm run test && npm run security-audit"
   },
-  "keywords": ["contract", "analysis", "pdf", "legal", "cloudflare-worker"],
+  "keywords": [
+    "contract",
+    "analysis",
+    "pdf",
+    "legal",
+    "cloudflare-worker"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@cloudflare/workers-types": "^4.20250922.0",
     "wrangler": "^4.38.0"
+  },
+  "devDependencies": {
+    "node-fetch": "^3.3.2"
   }
 }

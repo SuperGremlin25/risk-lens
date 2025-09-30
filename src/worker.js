@@ -9,6 +9,16 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+// Production security headers
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '1; mode=block',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https:; frame-ancestors 'none';",
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+};
+
 // Approved states for contract analysis
 const APPROVED_STATES = [
   'oklahoma', 'texas', 'louisiana', 'tennessee', 
@@ -31,20 +41,57 @@ const STATE_PATTERNS = {
 
 export default {
   async fetch(request, env, ctx) {
+    const startTime = Date.now();
     const url = new URL(request.url);
     
-    // Handle CORS preflight
-    if (request.method === 'OPTIONS') {
-      return new Response('', { headers: CORS_HEADERS });
-    }
+    try {
+      // Handle CORS preflight
+      if (request.method === 'OPTIONS') {
+        return new Response('', { 
+          headers: { ...CORS_HEADERS, ...SECURITY_HEADERS }
+        });
+      }
 
-    // API routes
-    if (url.pathname.startsWith('/api/')) {
-      return handleApiRequest(request, env, url);
-    }
+      // API routes
+      if (url.pathname.startsWith('/api/')) {
+        const response = await handleApiRequest(request, env, url);
+        
+        // Add performance timing header
+        const duration = Date.now() - startTime;
+        response.headers.set('X-Response-Time', `${duration}ms`);
+        
+        return response;
+      }
 
-    // Serve static files
-    return handleStaticRequest(url);
+      // Serve static files
+      const response = handleStaticRequest(url);
+      
+      // Add security headers to static content
+      Object.entries(SECURITY_HEADERS).forEach(([key, value]) => {
+        response.headers.set(key, value);
+      });
+      
+      return response;
+      
+    } catch (error) {
+      console.error('Worker Error:', error.message, {
+        url: url.pathname,
+        method: request.method,
+        duration: Date.now() - startTime
+      });
+      
+      return new Response(JSON.stringify({ 
+        error: 'Internal server error',
+        timestamp: new Date().toISOString()
+      }), {
+        status: 500,
+        headers: { 
+          ...CORS_HEADERS, 
+          ...SECURITY_HEADERS,
+          'Content-Type': 'application/json' 
+        }
+      });
+    }
   }
 };
 
@@ -55,83 +102,212 @@ async function handleApiRequest(request, env, url) {
     }
     
     if (url.pathname === '/api/health') {
-      return new Response(JSON.stringify({ status: 'ok' }), {
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+      const healthData = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        version: '1.0.0',
+        environment: env.ENVIRONMENT || 'development'
+      };
+      
+      return new Response(JSON.stringify(healthData), {
+        headers: { 
+          ...CORS_HEADERS, 
+          ...SECURITY_HEADERS,
+          'Content-Type': 'application/json' 
+        }
       });
     }
 
-    return new Response('Not Found', { status: 404, headers: CORS_HEADERS });
+    return new Response(JSON.stringify({ 
+      error: 'Not Found',
+      timestamp: new Date().toISOString()
+    }), { 
+      status: 404, 
+      headers: { 
+        ...CORS_HEADERS, 
+        ...SECURITY_HEADERS,
+        'Content-Type': 'application/json'
+      }
+    });
   } catch (error) {
-    console.error('API Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('API Error:', error.message, {
+      endpoint: url.pathname,
+      method: request.method
+    });
+    
+    return new Response(JSON.stringify({ 
+      error: 'Internal server error',
+      timestamp: new Date().toISOString()
+    }), {
       status: 500,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+      headers: { 
+        ...CORS_HEADERS, 
+        ...SECURITY_HEADERS,
+        'Content-Type': 'application/json' 
+      }
     });
   }
 }
 
 async function analyzeContract(request, env) {
-  // Rate limiting check
-  const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
-  const rateLimitKey = `rate_limit:${clientIP}`;
+  const startTime = Date.now();
   
-  const currentCount = await env.RISK_LENS_KV.get(rateLimitKey);
-  if (currentCount && parseInt(currentCount) > 10) {
-    return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
-      status: 429,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-    });
-  }
-
-  const body = await request.json();
-  const { text } = body;
-
-  if (!text || text.trim().length === 0) {
-    return new Response(JSON.stringify({ error: 'No text provided' }), {
-      status: 400,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-    });
-  }
-
-  // Cache check
-  const cacheKey = `analysis:${hashText(text)}`;
-  const cachedResult = await env.RISK_LENS_KV.get(cacheKey);
-  if (cachedResult) {
-    return new Response(cachedResult, {
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-    });
-  }
-
   try {
-    // Analyze the contract
-    const analysis = await performContractAnalysis(text, env);
+    // Rate limiting check
+    const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const rateLimitKey = `rate_limit:${clientIP}`;
+    
+    const currentCount = await env.RISK_LENS_KV.get(rateLimitKey);
+    if (currentCount && parseInt(currentCount) > 10) {
+      console.warn('Rate limit exceeded', { ip: clientIP, count: currentCount });
+      return new Response(JSON.stringify({ 
+        error: 'Rate limit exceeded. Please try again later.',
+        retryAfter: 3600,
+        timestamp: new Date().toISOString()
+      }), {
+        status: 429,
+        headers: { 
+          ...CORS_HEADERS, 
+          ...SECURITY_HEADERS,
+          'Content-Type': 'application/json',
+          'Retry-After': '3600'
+        }
+      });
+    }
 
-    // Update rate limit
+    // Parse and validate request body
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      return new Response(JSON.stringify({ 
+        error: 'Invalid JSON in request body',
+        timestamp: new Date().toISOString()
+      }), {
+        status: 400,
+        headers: { 
+          ...CORS_HEADERS, 
+          ...SECURITY_HEADERS,
+          'Content-Type': 'application/json' 
+        }
+      });
+    }
+
+    const { text } = body;
+
+    // Input validation
+    if (!text || typeof text !== 'string') {
+      return new Response(JSON.stringify({ 
+        error: 'Text field is required and must be a string',
+        timestamp: new Date().toISOString()
+      }), {
+        status: 400,
+        headers: { 
+          ...CORS_HEADERS, 
+          ...SECURITY_HEADERS,
+          'Content-Type': 'application/json' 
+        }
+      });
+    }
+
+    const trimmedText = text.trim();
+    if (trimmedText.length === 0) {
+      return new Response(JSON.stringify({ 
+        error: 'Contract text cannot be empty',
+        timestamp: new Date().toISOString()
+      }), {
+        status: 400,
+        headers: { 
+          ...CORS_HEADERS, 
+          ...SECURITY_HEADERS,
+          'Content-Type': 'application/json' 
+        }
+      });
+    }
+
+    // Text length validation (prevent abuse)
+    if (trimmedText.length > 50000) {
+      return new Response(JSON.stringify({ 
+        error: 'Contract text too long. Maximum 50,000 characters allowed.',
+        timestamp: new Date().toISOString()
+      }), {
+        status: 400,
+        headers: { 
+          ...CORS_HEADERS, 
+          ...SECURITY_HEADERS,
+          'Content-Type': 'application/json' 
+        }
+      });
+    }
+
+    // Cache check
+    const cacheKey = `analysis:${hashText(trimmedText)}`;
+    const cachedResult = await env.RISK_LENS_KV.get(cacheKey);
+    if (cachedResult) {
+      console.log('Cache hit for analysis', { 
+        textLength: trimmedText.length,
+        cacheKey: cacheKey.substring(0, 16) + '...'
+      });
+      
+      return new Response(cachedResult, {
+        headers: { 
+          ...CORS_HEADERS, 
+          ...SECURITY_HEADERS,
+          'Content-Type': 'application/json',
+          'X-Cache': 'HIT'
+        }
+      });
+    }
+
+    // Analyze the contract
+    const analysis = await performContractAnalysis(trimmedText, env);
+
+    // Update rate limit counter
     await env.RISK_LENS_KV.put(rateLimitKey, 
       String((parseInt(currentCount) || 0) + 1), 
       { expirationTtl: 3600 }
     );
 
-    // Cache result
-    await env.RISK_LENS_KV.put(cacheKey, JSON.stringify(analysis), {
-      expirationTtl: 86400 // 24 hours
+    // Cache result for 24 hours
+    const cacheData = JSON.stringify(analysis);
+    await env.RISK_LENS_KV.put(cacheKey, cacheData, {
+      expirationTtl: 86400
     });
 
-    return new Response(JSON.stringify(analysis), {
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    console.log('Contract analysis completed', {
+      textLength: trimmedText.length,
+      duration: Date.now() - startTime,
+      redFlagsCount: analysis.redFlags?.length || 0,
+      approvedStates: analysis.jurisdiction?.approvedStates?.length || 0
     });
+
+    return new Response(cacheData, {
+      headers: { 
+        ...CORS_HEADERS, 
+        ...SECURITY_HEADERS,
+        'Content-Type': 'application/json',
+        'X-Cache': 'MISS',
+        'X-Analysis-Time': `${Date.now() - startTime}ms`
+      }
+    });
+
   } catch (error) {
-    // Handle state validation errors with 403 status
-    if (error.message.includes('only supports contracts from') || 
-        error.message.includes('Colorado contracts are not supported')) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 403,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-      });
-    }
+    console.error('Contract analysis error:', error.message, {
+      duration: Date.now() - startTime,
+      stack: error.stack
+    });
     
-    // Re-throw other errors to be handled by the outer try-catch
-    throw error;
+    return new Response(JSON.stringify({
+      error: 'Failed to analyze contract. Please try again.',
+      timestamp: new Date().toISOString()
+    }), {
+      status: 500,
+      headers: { 
+        ...CORS_HEADERS, 
+        ...SECURITY_HEADERS,
+        'Content-Type': 'application/json' 
+      }
+    });
   }
 }
 
