@@ -30,6 +30,8 @@ Drop a PDF contract → instant plain-English summary, red flags, and structured
 
 ## Quick Start
 
+### Development
+
 1. **Install dependencies:**
    ```bash
    npm install
@@ -39,25 +41,59 @@ Drop a PDF contract → instant plain-English summary, red flags, and structured
    ```bash
    npm run dev
    ```
+   Visit http://localhost:8787 to test the application locally.
 
-3. **Deploy to Cloudflare:**
+### Production Deployment
+
+1. **One-time setup:**
    ```bash
-   npm run deploy
+   # Authenticate with Cloudflare
+   npx wrangler login
+   
+   # Create KV namespaces
+   npm run setup:kv
+   
+   # Update wrangler.toml with the generated namespace IDs
    ```
+
+2. **Deploy to production:**
+   ```bash
+   # Run pre-deployment checks
+   npm run pre-deploy
+   
+   # Deploy to production
+   npm run deploy:production
+   ```
+
+3. **Verify deployment:**
+   ```bash
+   # Replace with your actual Worker URL
+   npm run validate:deployment https://your-worker-url.workers.dev
+   ```
+
+For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## Configuration
 
 ### Environment Variables
 
-Copy `.env.example` to `.env` and configure:
+The application works out of the box, but you can enhance it with:
 
-- `HUGGINGFACE_API_TOKEN`: Optional Hugging Face API token for enhanced summaries
+- `HUGGINGFACE_API_TOKEN`: Optional Hugging Face API token for enhanced AI summaries (stored as Cloudflare secret)
 
 ### Cloudflare Setup
 
-1. Create a KV namespace: `wrangler kv:namespace create "RISK_LENS_KV"`
-2. Update `wrangler.toml` with your KV namespace IDs
-3. Deploy: `npm run deploy`
+The automated setup script handles KV namespace creation:
+
+```bash
+npm run setup:kv
+```
+
+Or manually:
+1. Create KV namespaces: `npx wrangler kv:namespace create "RISK_LENS_KV"`
+2. Create preview namespace: `npx wrangler kv:namespace create "RISK_LENS_KV" --preview`
+3. Update `wrangler.toml` with your KV namespace IDs
+4. Deploy: `npm run deploy:production`
 
 ## Usage
 
@@ -69,7 +105,7 @@ Copy `.env.example` to `.env` and configure:
 ## API Endpoints
 
 - `GET /`: Serves the main application UI
-- `GET /api/health`: Health check endpoint
+- `GET /api/health`: Health check endpoint with system status
 - `POST /api/analyze`: Contract analysis endpoint
   ```json
   {
@@ -77,10 +113,36 @@ Copy `.env.example` to `.env` and configure:
   }
   ```
 
-## Development
+## Development & Testing
 
-- `npm run dev`: Start development server
-- `npm run deploy`: Deploy to Cloudflare Workers
+- `npm run dev`: Start development server (http://localhost:8787)
+- `npm run test`: Run unit tests
+- `npm run test:api`: Test API endpoints
+- `npm run lint`: Run linting checks
+- `npm run pre-deploy`: Run all pre-deployment checks
+- `npm run security-audit`: Check for security vulnerabilities
+
+## Production Scripts
+
+- `npm run deploy:staging`: Deploy to staging environment
+- `npm run deploy:production`: Deploy to production environment
+- `npm run setup:kv`: Create required KV namespaces
+- `npm run validate:deployment <url>`: Validate deployed application
+
+## Monitoring
+
+- Health check: `GET /api/health`
+- Rate limiting: 10 requests per hour per IP
+- Caching: 24-hour TTL for analysis results
+- Real-time logs: `npx wrangler tail your-worker-name`
+
+## Production Features
+
+- 🔒 **Security**: Rate limiting, input validation, security headers
+- ⚡ **Performance**: Edge caching, client-side PDF processing
+- 🔍 **Monitoring**: Health checks, structured logging, error tracking
+- 🚀 **CI/CD**: Automated testing and deployment via GitHub Actions
+- 🌐 **Global**: Runs on Cloudflare's global edge network
 
 ## License
 
