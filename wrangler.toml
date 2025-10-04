@@ -2,10 +2,18 @@ name = "risk-lens"
 main = "src/worker.js"
 compatibility_date = "2024-01-15"
 
+# KV Namespace for caching and rate limiting
 [[kv_namespaces]]
 binding = "RISK_LENS_KV"
-preview_id = "preview_namespace_id"
-id = "production_namespace_id"
+preview_id = "7e79facf6e5d4b6ea167fb8856abafc2"
+id = "6776c34049c34eeea4a7808fedfc8e26"
 
 [vars]
 HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models"
+
+# Observability - Enable logs for debugging
+[observability.logs]
+enabled = true
+
+# Secrets (set with: wrangler secret put HUGGINGFACE_API_TOKEN)
+# HUGGINGFACE_API_TOKEN - Optional, enables AI-powered summaries

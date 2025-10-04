@@ -2,6 +2,8 @@
 
 Drop a PDF contract → instant plain-English summary, red flags, and structured clause extraction (payment terms, dates, termination, indemnity, liability, IP, auto-renewal, governing law, insurance, etc.).
 
+> **🚀 Ready to Deploy?** See [PRODUCTION-READY.md](PRODUCTION-READY.md) for deployment status and [QUICK-START.md](QUICK-START.md) for 15-minute deployment guide.
+
 ![RiskLens UI](https://github.com/user-attachments/assets/e62738cf-1324-43df-b0da-f6ef6e4e2a22)
 ![Analysis Results](https://github.com/user-attachments/assets/9a340717-6cd9-4f69-b6e3-89dff10d94fa)
 
@@ -30,20 +32,35 @@ Drop a PDF contract → instant plain-English summary, red flags, and structured
 
 ## Quick Start
 
+### Development Setup
+
 1. **Install dependencies:**
+
    ```bash
    npm install
    ```
 
 2. **Run locally:**
+
    ```bash
    npm run dev
    ```
 
-3. **Deploy to Cloudflare:**
-   ```bash
-   npm run deploy
-   ```
+   Visit <http://localhost:8787>
+
+### Production Deployment
+
+**For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md)**
+
+Quick deployment steps:
+
+1. Run setup script: `.\setup.ps1` (Windows)
+2. Login to Cloudflare: `npx wrangler login`
+3. Create KV namespaces (see DEPLOYMENT.md)
+4. Update `wrangler.toml` with namespace IDs
+5. Deploy: `npm run deploy`
+
+**📋 Use [DEPLOYMENT-CHECKLIST.md](DEPLOYMENT-CHECKLIST.md) to ensure production readiness**
 
 ## Configuration
 

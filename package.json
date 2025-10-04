@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "setup": "powershell -ExecutionPolicy Bypass -File ./setup.ps1",
     "test": "echo \"No tests specified\" && exit 0",
     "lint": "echo \"No linting configured\" && exit 0",
     "security-audit": "npm audit",
-    "type-check": "echo \"No TypeScript configured\" && exit 0"
+    "type-check": "echo \"No TypeScript configured\" && exit 0",
+    "kv:create": "wrangler kv:namespace create RISK_LENS_KV && wrangler kv:namespace create RISK_LENS_KV --preview",
+    "logs": "wrangler tail"
   },
   "keywords": ["contract", "analysis", "pdf", "legal", "cloudflare-worker"],
   "author": "",

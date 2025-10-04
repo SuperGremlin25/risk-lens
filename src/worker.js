@@ -274,6 +274,9 @@ function extractStructuredClauses(text) {
 
 async function generateSummary(text, env) {
   try {
+    const inputLength = text.substring(0, 1024).length;
+    console.log(`🤖 Attempting AI summary with Hugging Face (facebook/bart-large-cnn)... [${inputLength} chars]`);
+    
     const response = await fetch(`${env.HUGGINGFACE_API_URL}/facebook/bart-large-cnn`, {
       method: 'POST',
       headers: {
@@ -291,14 +294,38 @@ async function generateSummary(text, env) {
     });
 
     if (!response.ok) {
+      console.error(`❌ Hugging Face API error: ${response.status}`);
       throw new Error(`Hugging Face API error: ${response.status}`);
     }
 
     const result = await response.json();
+    console.log(`✅ AI summary generated successfully using Hugging Face [${inputLength} chars used]`);
+    
+    // Track usage in KV
+    await trackApiUsage(env, inputLength);
+    
     return result[0]?.summary_text || generateFallbackSummary(text);
   } catch (error) {
-    console.error('Summary generation error:', error);
+    console.error('⚠️ Summary generation error, using fallback:', error.message);
     return generateFallbackSummary(text);
+  }
+}
+
+async function trackApiUsage(env, charsUsed) {
+  try {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const usageKey = `api_usage:${today}`;
+    
+    const currentUsage = await env.RISK_LENS_KV.get(usageKey);
+    const newUsage = (parseInt(currentUsage) || 0) + charsUsed;
+    
+    await env.RISK_LENS_KV.put(usageKey, String(newUsage), {
+      expirationTtl: 2592000 // 30 days
+    });
+    
+    console.log(`📊 Daily API usage: ${newUsage} chars`);
+  } catch (error) {
+    console.error('Failed to track usage:', error);
   }
 }
 
