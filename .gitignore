@@ -16,6 +16,7 @@ dist/
 
 # Local configuration (contains account-specific IDs)
 wrangler.local.toml
+LOCAL-SETUP.md
 
 # OS generated files
 .DS_Store
