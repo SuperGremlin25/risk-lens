@@ -1,12 +1,25 @@
 /**
  * RiskLens Cloudflare Worker
- * Serves UI and provides API for contract analysis
+ * Serves UI and provides API for contract analysis with Stripe integration
  */
+
+import { 
+  canUserAnalyze, 
+  incrementUserUsage, 
+  getUserSubscription,
+  getUserUsage,
+  createCheckoutSession,
+  createPaymentIntent,
+  createCustomerPortalSession,
+  PRICING_TIERS
+} from './stripe-integration.js';
+import { handleStripeWebhook } from './stripe-webhooks.js';
+import { authenticateRequest, generateApiKey, createUserSession } from './auth-middleware.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
 };
 
 // Approved states for contract analysis
@@ -38,6 +51,22 @@ export default {
       return new Response('', { headers: CORS_HEADERS });
     }
 
+    // Stripe webhook endpoint
+    if (url.pathname === '/webhooks/stripe' && request.method === 'POST') {
+      try {
+        const result = await handleStripeWebhook(request, env);
+        return new Response(JSON.stringify(result), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        console.error('Webhook error:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // API routes
     if (url.pathname.startsWith('/api/')) {
       return handleApiRequest(request, env, url);
@@ -50,12 +79,46 @@ export default {
 
 async function handleApiRequest(request, env, url) {
   try {
+    // Contract analysis endpoint (with auth and usage tracking)
     if (url.pathname === '/api/analyze' && request.method === 'POST') {
       return await analyzeContract(request, env);
     }
     
+    // Health check
     if (url.pathname === '/api/health') {
       return new Response(JSON.stringify({ status: 'ok' }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Get user subscription and usage info
+    if (url.pathname === '/api/subscription' && request.method === 'GET') {
+      return await getSubscriptionInfo(request, env);
+    }
+
+    // Create checkout session for subscription
+    if (url.pathname === '/api/checkout' && request.method === 'POST') {
+      return await createCheckout(request, env);
+    }
+
+    // Create payment intent for pay-as-you-go
+    if (url.pathname === '/api/payment-intent' && request.method === 'POST') {
+      return await createPayment(request, env);
+    }
+
+    // Get customer portal URL
+    if (url.pathname === '/api/customer-portal' && request.method === 'POST') {
+      return await getCustomerPortal(request, env);
+    }
+
+    // Generate API key for user
+    if (url.pathname === '/api/generate-api-key' && request.method === 'POST') {
+      return await generateUserApiKey(request, env);
+    }
+
+    // Get pricing tiers
+    if (url.pathname === '/api/pricing' && request.method === 'GET') {
+      return new Response(JSON.stringify({ tiers: PRICING_TIERS }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
       });
     }
@@ -71,13 +134,21 @@ async function handleApiRequest(request, env, url) {
 }
 
 async function analyzeContract(request, env) {
-  // Rate limiting check
-  const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
-  const rateLimitKey = `rate_limit:${clientIP}`;
+  // Authenticate user
+  const auth = await authenticateRequest(request, env);
+  const userId = auth.userId;
   
-  const currentCount = await env.RISK_LENS_KV.get(rateLimitKey);
-  if (currentCount && parseInt(currentCount) > 10) {
-    return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+  // Check if user can analyze (within subscription limits)
+  const canAnalyze = await canUserAnalyze(userId, env);
+  
+  if (!canAnalyze.allowed) {
+    return new Response(JSON.stringify({ 
+      error: canAnalyze.reason,
+      usage: canAnalyze.usage,
+      limit: canAnalyze.limit,
+      tier: canAnalyze.tier,
+      upgradeUrl: '/pricing'
+    }), {
       status: 429,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
     });
@@ -104,18 +175,23 @@ async function analyzeContract(request, env) {
 
   try {
     // Analyze the contract
-    const analysis = await performContractAnalysis(text, env);
+    const analysis = await performContractAnalysis(text, env, auth);
 
-    // Update rate limit
-    await env.RISK_LENS_KV.put(rateLimitKey, 
-      String((parseInt(currentCount) || 0) + 1), 
-      { expirationTtl: 3600 }
-    );
+    // Increment user's usage counter
+    const updatedUsage = await incrementUserUsage(userId, env);
 
     // Cache result
     await env.RISK_LENS_KV.put(cacheKey, JSON.stringify(analysis), {
       expirationTtl: 86400 // 24 hours
     });
+
+    // Add usage info to response
+    analysis.usage = {
+      count: updatedUsage.count,
+      limit: canAnalyze.limit,
+      remaining: canAnalyze.limit - updatedUsage.count,
+      tier: canAnalyze.tier
+    };
 
     return new Response(JSON.stringify(analysis), {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
@@ -135,7 +211,136 @@ async function analyzeContract(request, env) {
   }
 }
 
-async function performContractAnalysis(text, env) {
+// Helper functions for new API endpoints
+async function getSubscriptionInfo(request, env) {
+  const auth = await authenticateRequest(request, env);
+  
+  if (!auth.authenticated) {
+    return new Response(JSON.stringify({ error: 'Authentication required' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    });
+  }
+  
+  const subscription = await getUserSubscription(auth.userId, env);
+  const usage = await getUserUsage(auth.userId, env);
+  const tier = PRICING_TIERS[subscription.tier];
+  
+  return new Response(JSON.stringify({
+    subscription,
+    usage,
+    tier: {
+      name: tier.name,
+      limit: tier.monthlyLimit,
+      features: tier.features,
+      price: tier.price
+    }
+  }), {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+  });
+}
+
+async function createCheckout(request, env) {
+  const auth = await authenticateRequest(request, env);
+  
+  if (!auth.authenticated) {
+    return new Response(JSON.stringify({ error: 'Authentication required' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    });
+  }
+  
+  const body = await request.json();
+  const { tier, successUrl, cancelUrl } = body;
+  
+  const tierConfig = PRICING_TIERS[tier];
+  if (!tierConfig || !tierConfig.stripePriceId) {
+    return new Response(JSON.stringify({ error: 'Invalid tier' }), {
+      status: 400,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    });
+  }
+  
+  const session = await createCheckoutSession(
+    auth.userId,
+    tierConfig.stripePriceId,
+    env,
+    successUrl || `${new URL(request.url).origin}/success`,
+    cancelUrl || `${new URL(request.url).origin}/pricing`
+  );
+  
+  return new Response(JSON.stringify({ url: session.url }), {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+  });
+}
+
+async function createPayment(request, env) {
+  const auth = await authenticateRequest(request, env);
+  
+  if (!auth.authenticated) {
+    return new Response(JSON.stringify({ error: 'Authentication required' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    });
+  }
+  
+  const paymentIntent = await createPaymentIntent(auth.userId, env);
+  
+  return new Response(JSON.stringify({ 
+    clientSecret: paymentIntent.client_secret 
+  }), {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+  });
+}
+
+async function getCustomerPortal(request, env) {
+  const auth = await authenticateRequest(request, env);
+  
+  if (!auth.authenticated) {
+    return new Response(JSON.stringify({ error: 'Authentication required' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    });
+  }
+  
+  const subscription = await getUserSubscription(auth.userId, env);
+  
+  if (!subscription.customerId) {
+    return new Response(JSON.stringify({ error: 'No subscription found' }), {
+      status: 404,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    });
+  }
+  
+  const session = await createCustomerPortalSession(
+    subscription.customerId,
+    env,
+    new URL(request.url).origin
+  );
+  
+  return new Response(JSON.stringify({ url: session.url }), {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+  });
+}
+
+async function generateUserApiKey(request, env) {
+  const auth = await authenticateRequest(request, env);
+  
+  if (!auth.authenticated) {
+    return new Response(JSON.stringify({ error: 'Authentication required' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    });
+  }
+  
+  const apiKey = await generateApiKey(auth.userId, auth.email, env);
+  
+  return new Response(JSON.stringify({ apiKey }), {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+  });
+}
+
+async function performContractAnalysis(text, env, auth) {
   // First, detect and validate contract states
   const detectedStates = detectContractStates(text);
   const stateValidation = validateContractStates(detectedStates);
@@ -147,8 +352,12 @@ async function performContractAnalysis(text, env) {
   // Extract structured clauses
   const clauses = extractStructuredClauses(text);
   
-  // Generate summary using Hugging Face
-  const summary = await generateSummary(text, env);
+  // Check if user has access to AI summaries (not free tier)
+  const subscription = await getUserSubscription(auth.userId, env);
+  const hasAiAccess = subscription.tier !== 'free';
+  
+  // Generate summary using Hugging Face (only for paid tiers)
+  const summary = hasAiAccess ? await generateSummary(text, env) : generateFallbackSummary(text);
   
   // Detect red flags
   const redFlags = detectRedFlags(text);

@@ -3,10 +3,11 @@ main = "src/worker.js"
 compatibility_date = "2024-01-15"
 
 # KV Namespace for caching and rate limiting
+# Replace these IDs with your own from: wrangler kv:namespace create "RISK_LENS_KV"
 [[kv_namespaces]]
 binding = "RISK_LENS_KV"
-preview_id = "7e79facf6e5d4b6ea167fb8856abafc2"
-id = "6776c34049c34eeea4a7808fedfc8e26"
+preview_id = "YOUR_PREVIEW_KV_NAMESPACE_ID"  # Replace with your preview_id
+id = "YOUR_PRODUCTION_KV_NAMESPACE_ID"       # Replace with your production id
 
 [vars]
 HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models"
@@ -15,5 +16,8 @@ HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models"
 [observability.logs]
 enabled = true
 
-# Secrets (set with: wrangler secret put HUGGINGFACE_API_TOKEN)
+# Secrets (set with: wrangler secret put SECRET_NAME)
 # HUGGINGFACE_API_TOKEN - Optional, enables AI-powered summaries
+# STRIPE_SECRET_KEY - Required for payment processing
+# STRIPE_WEBHOOK_SECRET - Required for webhook verification
+# JWT_SECRET - Required for user authentication
