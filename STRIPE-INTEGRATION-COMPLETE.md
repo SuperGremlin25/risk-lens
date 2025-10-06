@@ -1,4 +1,4 @@
-# ✅ Stripe Integration Complete!
+## ✅ Stripe Integration Complete!
 
 ## 🎉 What's Been Added
 
@@ -131,13 +131,12 @@ https://YOUR-WORKER.workers.dev/webhooks/stripe
 ### **JWT Tokens**
 ```javascript
 // Request header
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
+Authorization: Bearer 
 
 ### **API Keys**
 ```javascript
 // Request header
-X-API-Key: rl_1234567890abcdef...
+X-API-Key: 
 ```
 
 ### **Anonymous (Free Tier)**
