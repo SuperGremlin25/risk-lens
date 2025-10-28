@@ -51,7 +51,7 @@ Currently, RiskLens exists as a standalone Worker application. The goal is to em
 
 ### Current Setup
 - **Existing Site**: Cloudflare Page (URL: TBD)
-- **Worker API**: `https://risk-lens.blake3306.workers.dev/api/analyze`
+- **Worker API**: `
 - **Backend**: Cloudflare Worker with KV storage
 - **AI**: Hugging Face API (facebook/bart-large-cnn)
 
