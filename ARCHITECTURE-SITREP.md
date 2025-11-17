@@ -3,7 +3,7 @@
 **Date**: 2025-10-04  
 **Status**: Production-ready (pending Stripe configuration)  
 **Deployment**: Cloudflare Workers  
-**URL**: https://risk-lens.digital-insurgent-workers.workers.dev
+**URL**: https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev
 
 ---
 
@@ -21,7 +21,7 @@
 - **Platform**: Cloudflare Workers (serverless edge computing)
 - **Storage**: Cloudflare KV (key-value store)
 - **Deployment**: Single-file worker deployment via Wrangler CLI
-- **Domain**: `risk-lens.digital-insurgent-workers.workers.dev` (supports custom domains)
+- **Domain**: `YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev` (supports custom domains)
 
 ### Frontend
 - **Framework**: Vanilla JavaScript (embedded in worker HTML)
@@ -316,7 +316,7 @@ Patterns flagged:
 
 ### API Endpoint:
 ```
-https://risk-lens.digital-insurgent-workers.workers.dev/api/analyze
+https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev/api/analyze
 ```
 
 ### Request Format:
@@ -433,7 +433,7 @@ npx wrangler secret put HUGGINGFACE_API_TOKEN
 ### Step 3: Setup Stripe Webhooks
 1. Go to Stripe Dashboard → Developers → Webhooks
 2. Click "Add endpoint"
-3. URL: `https://risk-lens.digital-insurgent-workers.workers.dev/webhooks/stripe`
+3. URL: `https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev/webhooks/stripe`
 4. Select events:
    - `customer.subscription.created`
    - `customer.subscription.updated`
@@ -464,7 +464,7 @@ stripe trigger customer.subscription.created
 ### Option 1: iFrame Embed (Easiest - 5 minutes)
 ```html
 <iframe 
-  src="https://risk-lens.digital-insurgent-workers.workers.dev" 
+  src="https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev" 
   width="100%" 
   height="800px" 
   frameborder="0"

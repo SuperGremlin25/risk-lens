@@ -178,7 +178,7 @@ Currently, RiskLens exists as a standalone Worker application. The goal is to em
 
 #### JavaScript API Integration
 ```javascript
-const API_ENDPOINT = 'https://risk-lens.blake3306.workers.dev/api/analyze';
+const API_ENDPOINT = 'https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev/api/analyze';
 
 async function analyzeContract(text) {
   const response = await fetch(API_ENDPOINT, {
