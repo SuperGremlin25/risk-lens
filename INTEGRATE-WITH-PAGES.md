@@ -8,7 +8,7 @@ Add this to your existing Cloudflare Page HTML:
 
 ```html
 <iframe 
-  src="https://risk-lens.blake3306.workers.dev" 
+  src="https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev" 
   width="100%" 
   height="800px" 
   frameborder="0"
@@ -83,7 +83,7 @@ async function analyzeContract() {
   resultsDiv.innerHTML = '<p>Analyzing...</p>';
   
   try {
-    const response = await fetch('https://risk-lens.blake3306.workers.dev/api/analyze', {
+    const response = await fetch('https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev/api/analyze', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -155,7 +155,7 @@ Route a subdomain or path from your Cloudflare Page to the Worker.
 3. Users access it at: `https://yoursite.com/analyze`
 
 **Setup:**
-1. Go to: https://dash.cloudflare.com/240178aeb827fe1a5bf511d942c35e5c/workers/services/view/risk-lens/production/routes
+1. Go to: Cloudflare Dashboard → Workers → Your Worker → Settings → Triggers
 2. Click "Add route"
 3. Enter: `yoursite.com/analyze/*`
 4. Select zone: Your domain

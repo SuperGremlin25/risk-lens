@@ -101,7 +101,7 @@ RiskLens takes security seriously. This document outlines our security measures 
 If you discover a security vulnerability, please report it responsibly:
 
 1. **Do Not** create public GitHub issues for security vulnerabilities
-2. Email security concerns to: [security contact email]
+2. Contact the repository maintainers privately through GitHub
 3. Include detailed description and steps to reproduce
 4. Allow reasonable time for response and fix
 
