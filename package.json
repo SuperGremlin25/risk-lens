@@ -19,6 +19,6 @@
   "license": "MIT",
   "dependencies": {
     "@cloudflare/workers-types": "^4.20250922.0",
-    "wrangler": "^4.38.0"
+    "wrangler": "^4.59.3"
   }
 }
